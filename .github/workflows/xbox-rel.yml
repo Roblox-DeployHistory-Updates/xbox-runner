@@ -26,7 +26,7 @@ jobs:
       - name: Extract contentId
         id: extract
         run: |
-          contentId=$(jq -r '.Products[0].Properties.Packages[0].ContentId' product.json)
+          contentId=$(jq -r '.Products[0].DisplaySkuAvailabilities[0].Sku.Properties.Packages[0].ContentId' product.json)
           echo "contentId=$contentId" >> "$GITHUB_OUTPUT"
 
       - name: Get latest release contentId
