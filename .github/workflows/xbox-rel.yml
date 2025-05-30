@@ -45,14 +45,9 @@ jobs:
             echo "latest_content_id=none" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Exit if already released
-        if: steps.extract.outputs.contentId == steps.get_latest.outputs.latest_content_id
-        run: |
-          echo "This contentId has already been released."
-          exit 0
-
       - name: Get download URL from API
         id: apicall
+        if: steps.extract.outputs.contentId != steps.get_latest.outputs.latest_content_id
         run: |
           response=$(curl -sSL -X GET "${{ secrets.XBOX_BASEURL }}/Game/GetGamePackage?contentId=${{ steps.extract.outputs.contentId }}&platform=0" \
             -H "User-Agent: ${{ secrets.XBOX_USER_AGENT }}" \
@@ -67,10 +62,12 @@ jobs:
           echo "filename=$filename" >> "$GITHUB_OUTPUT"
 
       - name: Download .xvc file
+        if: steps.extract.outputs.contentId != steps.get_latest.outputs.latest_content_id
         run: |
           curl -sSL "${{ steps.apicall.outputs.xvc_url }}" -o "${{ steps.apicall.outputs.filename }}.xvc"
 
       - name: Upload release using ncipollo/release-action
+        if: steps.extract.outputs.contentId != steps.get_latest.outputs.latest_content_id
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ steps.apicall.outputs.filename }}
