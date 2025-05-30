@@ -23,30 +23,33 @@ jobs:
           curl -sSL "$PRODUCT_URL" -o product.json
           cat product.json
 
-      - name: Extract contentId and version
+      - name: Extract contentId
         id: extract
         run: |
-          contentId=$(jq -r '.Products[0].Properties.Packages[0].Id' product.json)
-          version=$(jq -r '.Products[0].Properties.Version' product.json)
+          contentId=$(jq -r '.Products[0].Properties.Packages[0].ContentId' product.json)
           echo "contentId=$contentId" >> "$GITHUB_OUTPUT"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Check if release for version already exists
-        id: checkrelease
+      - name: Get latest release contentId
+        id: get_latest
+        continue-on-error: true
         run: |
-          tag="v${{ steps.extract.outputs.version }}"
-          if gh release view "$tag" &>/dev/null; then
-            echo "Release already exists for $tag"
-            echo "skip=true" >> "$GITHUB_OUTPUT"
+          latest_json=$(curl -sSL \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/${{ github.repository }}/releases/latest)
+
+          desc=$(echo "$latest_json" | jq -r '.body // ""')
+          if echo "$desc" | grep -q 'ContentId:'; then
+            latest_cid=$(echo "$desc" | grep -o 'ContentId: .*' | cut -d' ' -f2)
+            echo "latest_content_id=$latest_cid" >> "$GITHUB_OUTPUT"
           else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "latest_content_id=none" >> "$GITHUB_OUTPUT"
           fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Exit if already released
-        if: steps.checkrelease.outputs.skip == 'true'
-        run: exit 0
+        if: steps.extract.outputs.contentId == steps.get_latest.outputs.latest_content_id
+        run: |
+          echo "This contentId has already been released."
+          exit 0
 
       - name: Get download URL from API
         id: apicall
@@ -67,11 +70,15 @@ jobs:
         run: |
           curl -sSL "${{ steps.apicall.outputs.xvc_url }}" -o "${{ steps.apicall.outputs.filename }}.xvc"
 
-      - name: Create GitHub release
-        run: |
-          gh release create "v${{ steps.extract.outputs.version }}" \
-            --title "Roblox Version ${{ steps.extract.outputs.version }}" \
-            --notes "Automated release of Roblox XVC and metadata." \
-            product.json "${{ steps.apicall.outputs.filename }}.xvc"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload release using ncipollo/release-action
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.apicall.outputs.filename }}
+          name: ${{ steps.apicall.outputs.filename }}
+          body: |
+            ${{ steps.apicall.outputs.filename }}
+
+            ContentId: ${{ steps.extract.outputs.contentId }}
+          artifacts: |
+            product.json
+            ${{ steps.apicall.outputs.filename }}.xvc
