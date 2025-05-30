@@ -1,0 +1,77 @@
+name: Roblox XVC Fetch and Release
+permissions: write-all
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+  push:
+
+jobs:
+  fetch-and-release:
+    runs-on: ubuntu-latest
+
+    env:
+      PRODUCT_URL: https://displaycatalog.mp.microsoft.com/v7.0/products?bigIds=BQ1TN1T79V9K&market=US&languages=en-US,neutral&MS-CV=DGU1mcuYo0WMMp+F.1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download product.json
+        run: |
+          curl -sSL "$PRODUCT_URL" -o product.json
+          cat product.json
+
+      - name: Extract contentId and version
+        id: extract
+        run: |
+          contentId=$(jq -r '.Products[0].Properties.Packages[0].Id' product.json)
+          version=$(jq -r '.Products[0].Properties.Version' product.json)
+          echo "contentId=$contentId" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Check if release for version already exists
+        id: checkrelease
+        run: |
+          tag="v${{ steps.extract.outputs.version }}"
+          if gh release view "$tag" &>/dev/null; then
+            echo "Release already exists for $tag"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Exit if already released
+        if: steps.checkrelease.outputs.skip == 'true'
+        run: exit 0
+
+      - name: Get download URL from API
+        id: apicall
+        run: |
+          response=$(curl -sSL -X GET "${{ secrets.XBOX_BASEURL }}/Game/GetGamePackage?contentId=${{ steps.extract.outputs.contentId }}&platform=0" \
+            -H "User-Agent: ${{ secrets.XBOX_USER_AGENT }}" \
+            -H "X-Organization: ${{ secrets.XBOX_ORGANIZATION }}" \
+            -H "X-Author: ${{ secrets.XBOX_AUTHOR }}" )
+
+          echo "$response" | jq '.'
+
+          xvc_url=$(echo "$response" | jq -r '.data.url')
+          filename=$(basename "$xvc_url")
+          echo "xvc_url=$xvc_url" >> "$GITHUB_OUTPUT"
+          echo "filename=$filename" >> "$GITHUB_OUTPUT"
+
+      - name: Download .xvc file
+        run: |
+          curl -sSL "${{ steps.apicall.outputs.xvc_url }}" -o "${{ steps.apicall.outputs.filename }}.xvc"
+
+      - name: Create GitHub release
+        run: |
+          gh release create "v${{ steps.extract.outputs.version }}" \
+            --title "Roblox Version ${{ steps.extract.outputs.version }}" \
+            --notes "Automated release of Roblox XVC and metadata." \
+            product.json "${{ steps.apicall.outputs.filename }}.xvc"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
