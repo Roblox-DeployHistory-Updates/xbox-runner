@@ -23,13 +23,15 @@ jobs:
           curl -sSL "$PRODUCT_URL" -o product.json
           cat product.json
 
-      - name: Extract contentId
+      - name: Extract info
         id: extract
         run: |
           contentId=$(jq -r '.Products[0].DisplaySkuAvailabilities[0].Sku.Properties.Packages[0].ContentId' product.json)
+          lastUpdateDate=$(jq -r '.Products[0].DisplaySkuAvailabilities[0].Sku.Properties.LastUpdateDate' product.json)
           echo "contentId=$contentId" >> "$GITHUB_OUTPUT"
+          echo "lastUpdateDate=$lastUpdateDate" >> "$GITHUB_OUTPUT"
 
-      - name: Get latest release contentId
+      - name: Get latest release LastUpdateDate
         id: get_latest
         continue-on-error: true
         run: |
@@ -38,16 +40,16 @@ jobs:
             https://api.github.com/repos/${{ github.repository }}/releases/latest)
 
           desc=$(echo "$latest_json" | jq -r '.body // ""')
-          if echo "$desc" | grep -q 'ContentId:'; then
-            latest_cid=$(echo "$desc" | grep -o 'ContentId: .*' | cut -d' ' -f2)
-            echo "latest_content_id=$latest_cid" >> "$GITHUB_OUTPUT"
+          if echo "$desc" | grep -q 'LastUpdateDate:'; then
+            latest_lud=$(echo "$desc" | grep -o 'LastUpdateDate: .*' | cut -d' ' -f2)
+            echo "latest_last_update=$latest_lud" >> "$GITHUB_OUTPUT"
           else
-            echo "latest_content_id=none" >> "$GITHUB_OUTPUT"
+            echo "latest_last_update=none" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Get download URL from API
         id: apicall
-        if: steps.extract.outputs.contentId != steps.get_latest.outputs.latest_content_id
+        if: steps.extract.outputs.lastUpdateDate != steps.get_latest.outputs.latest_last_update
         run: |
           response=$(curl -sSL -X GET "${{ secrets.XBOX_BASEURL }}/Game/GetGamePackage?contentId=${{ steps.extract.outputs.contentId }}&platform=0" \
             -H "User-Agent: ${{ secrets.XBOX_USER_AGENT }}" \
@@ -62,12 +64,12 @@ jobs:
           echo "filename=$filename" >> "$GITHUB_OUTPUT"
 
       - name: Download .xvc file
-        if: steps.extract.outputs.contentId != steps.get_latest.outputs.latest_content_id
+        if: steps.extract.outputs.lastUpdateDate != steps.get_latest.outputs.latest_last_update
         run: |
           curl -sSL "${{ steps.apicall.outputs.xvc_url }}" -o "${{ steps.apicall.outputs.filename }}.xvc"
 
       - name: Upload release using ncipollo/release-action
-        if: steps.extract.outputs.contentId != steps.get_latest.outputs.latest_content_id
+        if: steps.extract.outputs.lastUpdateDate != steps.get_latest.outputs.latest_last_update
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ steps.apicall.outputs.filename }}
@@ -75,7 +77,7 @@ jobs:
           body: |
             ${{ steps.apicall.outputs.filename }}
 
-            ContentId: ${{ steps.extract.outputs.contentId }}
+            LastUpdateDate: ${{ steps.extract.outputs.lastUpdateDate }}
           artifacts: |
             product.json
             ${{ steps.apicall.outputs.filename }}.xvc
