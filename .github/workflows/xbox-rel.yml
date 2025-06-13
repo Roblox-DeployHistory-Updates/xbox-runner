@@ -68,8 +68,17 @@ jobs:
         run: |
           curl -sSL "${{ steps.apicall.outputs.xvc_url }}" -o "${{ steps.apicall.outputs.filename }}.xvc"
 
+      - name: Check if tag already exists
+        id: tagcheck
+        run: |
+          if git ls-remote --tags origin | grep -q "refs/tags/${{ steps.apicall.outputs.filename }}$"; then
+            echo "tag_exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag_exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Upload release using ncipollo/release-action
-        if: steps.extract.outputs.lastUpdateDate != steps.get_latest.outputs.latest_last_update
+        if: steps.extract.outputs.lastUpdateDate != steps.get_latest.outputs.latest_last_update && steps.tagcheck.outputs.tag_exists == 'false'
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ steps.apicall.outputs.filename }}
