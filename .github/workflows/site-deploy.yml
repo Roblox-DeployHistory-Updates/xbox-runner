@@ -1,0 +1,85 @@
+name: Deploy GitHub Pages
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [Roblox XVC Fetch and Release]
+    types: [completed]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ (github.event_name != 'workflow_run') || (github.event.workflow_run.conclusion == 'success') }}
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Download All Releases Artifacts
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const path = require('path');
+          const releases = await github.paginate(github.rest.repos.listReleases, {
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            per_page: 100
+          });
+
+          fs.mkdirSync('artifacts');
+
+          for (const release of releases) {
+            const assets = await github.rest.repos.listReleaseAssets({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: release.id
+            });
+            for (const asset of assets.data) {
+              if (asset.name === 'product.json') {
+                const response = await github.rest.repos.getReleaseAsset({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  asset_id: asset.id,
+                  headers: { accept: 'application/octet-stream' }
+                });
+                const filePath = path.join('artifacts', `${release.tag_name}.json`);
+                fs.writeFileSync(filePath, Buffer.from(response.data));
+              }
+              if (asset.name.endsWith('.xvc')) {
+                const metaFilePath = path.join('artifacts', `${release.tag_name}.meta`);
+                fs.writeFileSync(metaFilePath, JSON.stringify({
+                  size: asset.size,
+                  url: asset.browser_download_url
+                }, null, 2));
+              }
+            }
+          }
+
+    - name: Install Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+
+    - name: Generate clients.json
+      run: node site/generate-clients-json.js
+
+    - name: Setup Pages
+      uses: actions/configure-pages@v5
+
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: './site'
+
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4
