@@ -10,6 +10,8 @@ on:
 jobs:
   fetch-and-release:
     runs-on: ubuntu-latest
+    outputs:
+      new_release_created: ${{ steps.release_check.outputs.created }}
 
     env:
       PRODUCT_URL: https://displaycatalog.mp.microsoft.com/v7.0/products?bigIds=BQ1TN1T79V9K&market=US&languages=en-US,neutral&MS-CV=DGU1mcuYo0WMMp+F.1
@@ -90,3 +92,8 @@ jobs:
           artifacts: |
             product.json
             ${{ steps.apicall.outputs.filename }}.xvc
+
+      - name: Set release output
+        id: release_check
+        if: steps.extract.outputs.lastUpdateDate != steps.get_latest.outputs.latest_last_update && steps.tagcheck.outputs.tag_exists == 'false'
+        run: echo "created=true" >> "$GITHUB_OUTPUT"
