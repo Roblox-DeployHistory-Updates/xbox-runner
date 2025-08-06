@@ -72,13 +72,21 @@ jobs:
     - name: Generate clients.json
       run: node site/generate-clients-json.js
 
+    - name: Install dependencies
+      run: npm ci
+      working-directory: site
+
+    - name: Build
+      run: npm run build
+      working-directory: site
+
     - name: Setup Pages
       uses: actions/configure-pages@v5
 
     - name: Upload artifact
       uses: actions/upload-pages-artifact@v3
       with:
-        path: './site'
+        path: './site/public'
 
     - name: Deploy to GitHub Pages
       id: deployment

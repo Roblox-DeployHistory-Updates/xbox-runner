@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 const artifactsDir = 'artifacts';
-const outputFilePath = 'site/clients.json';
+const outputFilePath = 'site/public/clients.json';
 
 if (!fs.existsSync(artifactsDir)) {
   console.error(`Artifacts directory "${artifactsDir}" does not exist.`);
