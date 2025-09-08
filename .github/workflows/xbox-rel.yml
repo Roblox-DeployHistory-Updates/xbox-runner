@@ -96,4 +96,4 @@ jobs:
       - name: Set release output
         id: release_check
         if: steps.extract.outputs.lastUpdateDate != steps.get_latest.outputs.latest_last_update && steps.tagcheck.outputs.tag_exists == 'false'
-        run: echo "created=true" >> "$GITHUB_OUTPUT"
+        run: echo "new_release_created=true" >> "$GITHUB_OUTPUT"
