@@ -49,21 +49,37 @@ jobs:
             echo "latest_last_update=none" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Get download URL from API
+      - name: Get download URL from MsixvcPackageDownloader
         id: apicall
         if: steps.extract.outputs.lastUpdateDate != steps.get_latest.outputs.latest_last_update
         run: |
-          response=$(curl -sSL -X GET "${{ secrets.XBOX_BASEURL }}/Game/GetGamePackage?contentId=${{ steps.extract.outputs.contentId }}&platform=0" \
-            -H "User-Agent: ${{ secrets.XBOX_USER_AGENT }}" \
-            -H "X-Organization: ${{ secrets.XBOX_ORGANIZATION }}" \
-            -H "X-Author: ${{ secrets.XBOX_AUTHOR }}" )
-
-          echo "$response" | jq '.'
-
-          xvc_url=$(echo "$response" | jq -r '.data.url')
-          filename=$(basename "$xvc_url")
+          curl -sSL "https://github.com/Yakov5776/MsixvcPackageDownloader/releases/download/release-v1.4/linux-x64-build.zip" -o MsixvcPackageDownloader.zip
+          unzip -q MsixvcPackageDownloader.zip
+          chmod +x MsixvcPackageDownloader
+          cat << 'EOF' > token.json
+          ${{ secrets.MS_TOKEN }}
+          EOF
+          xvc_url=$(./MsixvcPackageDownloader ${{ steps.extract.outputs.contentId }})
+          
           echo "xvc_url=$xvc_url" >> "$GITHUB_OUTPUT"
+          filename=$(basename "$xvc_url")
           echo "filename=$filename" >> "$GITHUB_OUTPUT"
+
+      - name: Update MS_TOKEN secret
+        if: steps.extract.outputs.lastUpdateDate != steps.get_latest.outputs.latest_last_update
+        env:
+          UPDATE_URL:  ${{ secrets.SECRET_POST_URL }}
+          PUSH_KEY: ${{ secrets.SECRET_POST_TOKEN }}
+        run: |
+          NEW_TOKEN=$(cat token.json)
+          ENCODED_VALUE=$(echo -n "$NEW_TOKEN" | base64)
+
+          curl -X POST "$UPDATE_URL" \
+            -H "Content-Type: application/json" \
+            -H "x-access-key: $PUSH_KEY" \
+            -d @- << EOF
+          {"value": "$ENCODED_VALUE"}
+          EOF
 
       - name: Download .xvc file
         if: steps.extract.outputs.lastUpdateDate != steps.get_latest.outputs.latest_last_update
@@ -72,6 +88,7 @@ jobs:
 
       - name: Check if tag already exists
         id: tagcheck
+        if: steps.extract.outputs.lastUpdateDate != steps.get_latest.outputs.latest_last_update
         run: |
           if git ls-remote --tags origin | grep -q "refs/tags/${{ steps.apicall.outputs.filename }}$"; then
             echo "tag_exists=true" >> "$GITHUB_OUTPUT"
