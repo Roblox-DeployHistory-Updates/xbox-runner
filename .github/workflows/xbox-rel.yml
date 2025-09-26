@@ -52,14 +52,25 @@ jobs:
       - name: Get download URL from MsixvcPackageDownloader
         id: apicall
         if: steps.extract.outputs.lastUpdateDate != steps.get_latest.outputs.latest_last_update
+        env:
+          PUSH_KEY: ${{ secrets.SECRET_POST_TOKEN }}
         run: |
-          curl -sSL "https://github.com/Yakov5776/MsixvcPackageDownloader/releases/download/release-v1.4/linux-x64-build.zip" -o MsixvcPackageDownloader.zip
+          curl -sSL "https://github.com/Yakov5776/MsixvcPackageDownloader/releases/download/release-v1.5/linux-x64-build.zip" -o MsixvcPackageDownloader.zip
           unzip -q MsixvcPackageDownloader.zip
           chmod +x MsixvcPackageDownloader
           cat << 'EOF' > token.json
           ${{ secrets.MS_TOKEN }}
           EOF
+          
           xvc_url=$(./MsixvcPackageDownloader ${{ steps.extract.outputs.contentId }})
+          if [ -z "$xvc_url" ]; then
+            echo "MsixvcPackageDownloader failed, trying to refresh token..."
+            auth_json=$(curl -sSL -X POST "${{ secrets.SECRET_POST_URL }}?mode=refresh" -H "x-access-key: $PUSH_KEY")
+            auth_url=$(echo "$auth_json" | jq -r '.authUrl')
+            echo "$auth_url" > authUrl.txt
+            echo "Retrying MsixvcPackageDownloader with refreshed token..."
+            xvc_url=$(./MsixvcPackageDownloader ${{ steps.extract.outputs.contentId }})
+          fi
           
           echo "xvc_url=$xvc_url" >> "$GITHUB_OUTPUT"
           filename=$(basename "$xvc_url")
