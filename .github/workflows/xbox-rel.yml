@@ -121,6 +121,22 @@ jobs:
             product.json
             ${{ steps.apicall.outputs.filename }}.xvc
 
+      - name: Archive product and MSIXVC URLs to Wayback Machine
+        if: steps.extract.outputs.lastUpdateDate != steps.get_latest.outputs.latest_last_update && steps.tagcheck.outputs.tag_exists == 'false'
+        run: |
+          curl -s -X POST \
+            -H "Accept: application/json" \
+            -H "Authorization: LOW ${{ secrets.ARCHIVE_ORG_ACCESS_KEY }}:${{ secrets.ARCHIVE_ORG_SECRET_KEY }}" \
+            --data-urlencode "url=$PRODUCT_URL" \
+            -d "capture_outlinks=1" \
+            https://web.archive.org/save
+
+          curl -s -X POST \
+            -H "Accept: application/json" \
+            -H "Authorization: LOW ${{ secrets.ARCHIVE_ORG_ACCESS_KEY }}:${{ secrets.ARCHIVE_ORG_SECRET_KEY }}" \
+            --data-urlencode "url=${{ steps.apicall.outputs.xvc_url }}" \
+            https://web.archive.org/save
+
       - name: Set release output
         id: release_check
         if: steps.extract.outputs.lastUpdateDate != steps.get_latest.outputs.latest_last_update && steps.tagcheck.outputs.tag_exists == 'false'
