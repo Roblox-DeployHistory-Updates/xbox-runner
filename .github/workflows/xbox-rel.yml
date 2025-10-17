@@ -14,7 +14,7 @@ jobs:
       new_release_created: ${{ steps.release_check.outputs.created }}
 
     env:
-      PRODUCT_URL: https://displaycatalog.mp.microsoft.com/v7.0/products?bigIds=BQ1TN1T79V9K&market=US&languages=en-US,neutral&MS-CV=DGU1mcuYo0WMMp+F.1
+      PRODUCT_ID: BQ1TN1T79V9K
 
     steps:
       - name: Checkout
@@ -22,6 +22,8 @@ jobs:
 
       - name: Download product.json
         run: |
+          PRODUCT_URL="https://displaycatalog.mp.microsoft.com/v7.0/products?bigIds=${PRODUCT_ID}&market=US&languages=en-US,neutral&MS-CV=DGU1mcuYo0WMMp+F.1"
+          echo "PRODUCT_URL=$PRODUCT_URL" >> $GITHUB_ENV
           curl -sSL "$PRODUCT_URL" -o product.json
           cat product.json
 
@@ -49,48 +51,21 @@ jobs:
             echo "latest_last_update=none" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Get download URL from MsixvcPackageDownloader
+      - name: Get download URL from msixvcdl-expressjs
         id: apicall
         if: steps.extract.outputs.lastUpdateDate != steps.get_latest.outputs.latest_last_update
         env:
-          PUSH_KEY: ${{ secrets.SECRET_POST_TOKEN }}
+          POST_KEY: ${{ secrets.SECRET_POST_TOKEN }}
         run: |
-          curl -sSL "https://github.com/Yakov5776/MsixvcPackageDownloader/releases/download/release-v1.5/linux-x64-build.zip" -o MsixvcPackageDownloader.zip
-          unzip -q MsixvcPackageDownloader.zip
-          chmod +x MsixvcPackageDownloader
-          cat << 'EOF' > token.json
-          ${{ secrets.MS_TOKEN }}
-          EOF
-          
-          xvc_url=$(./MsixvcPackageDownloader ${{ steps.extract.outputs.contentId }})
+          msixvc_req=$(curl -sSL -X GET "https://msixvc.yakov.cloud/msixvc/$PRODUCT_ID" -H "Authorization: Bearer $POST_KEY")
+          xvc_url=$(echo "$msixvc_req" | jq -r '.files[0].url')
           if [ -z "$xvc_url" ]; then
-            echo "MsixvcPackageDownloader failed, trying to refresh token..."
-            auth_json=$(curl -sSL -X POST "${{ secrets.SECRET_POST_URL }}?mode=refresh" -H "x-access-key: $PUSH_KEY")
-            auth_url=$(echo "$auth_json" | jq -r '.authUrl')
-            echo "$auth_url" > authUrl.txt
-            echo "Retrying MsixvcPackageDownloader with refreshed token..."
-            xvc_url=$(./MsixvcPackageDownloader ${{ steps.extract.outputs.contentId }})
+            echo "Error: No XVC URL found"
+            exit 1
           fi
-          
           echo "xvc_url=$xvc_url" >> "$GITHUB_OUTPUT"
           filename=$(basename "$xvc_url")
           echo "filename=$filename" >> "$GITHUB_OUTPUT"
-
-      - name: Update MS_TOKEN secret
-        if: steps.extract.outputs.lastUpdateDate != steps.get_latest.outputs.latest_last_update
-        env:
-          UPDATE_URL:  ${{ secrets.SECRET_POST_URL }}
-          PUSH_KEY: ${{ secrets.SECRET_POST_TOKEN }}
-        run: |
-          NEW_TOKEN=$(cat token.json)
-          ENCODED_VALUE=$(echo -n "$NEW_TOKEN" | base64)
-
-          curl -X POST "$UPDATE_URL" \
-            -H "Content-Type: application/json" \
-            -H "x-access-key: $PUSH_KEY" \
-            -d @- << EOF
-          {"value": "$ENCODED_VALUE"}
-          EOF
 
       - name: Download .xvc file
         if: steps.extract.outputs.lastUpdateDate != steps.get_latest.outputs.latest_last_update
