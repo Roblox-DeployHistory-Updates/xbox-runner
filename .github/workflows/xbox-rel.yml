@@ -67,11 +67,6 @@ jobs:
           filename=$(basename "$xvc_url")
           echo "filename=$filename" >> "$GITHUB_OUTPUT"
 
-      - name: Download .xvc file
-        if: steps.extract.outputs.lastUpdateDate != steps.get_latest.outputs.latest_last_update
-        run: |
-          curl -sSL "${{ steps.apicall.outputs.xvc_url }}" -o "${{ steps.apicall.outputs.filename }}.xvc"
-
       - name: Check if tag already exists
         id: tagcheck
         if: steps.extract.outputs.lastUpdateDate != steps.get_latest.outputs.latest_last_update
@@ -81,6 +76,11 @@ jobs:
           else
             echo "tag_exists=false" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Download .xvc file
+        if: steps.extract.outputs.lastUpdateDate != steps.get_latest.outputs.latest_last_update && steps.tagcheck.outputs.tag_exists == 'false'
+        run: |
+          curl -sSL "${{ steps.apicall.outputs.xvc_url }}" -o "${{ steps.apicall.outputs.filename }}.xvc"
 
       - name: Upload release using ncipollo/release-action
         if: steps.extract.outputs.lastUpdateDate != steps.get_latest.outputs.latest_last_update && steps.tagcheck.outputs.tag_exists == 'false'
@@ -96,7 +96,7 @@ jobs:
             product.json
             ${{ steps.apicall.outputs.filename }}.xvc
 
-      - name: Archive product and MSIXVC URLs to Wayback Machine
+      - name: Archive product and XVC URL to Wayback Machine
         if: steps.extract.outputs.lastUpdateDate != steps.get_latest.outputs.latest_last_update && steps.tagcheck.outputs.tag_exists == 'false'
         run: |
           curl -s -X POST \
