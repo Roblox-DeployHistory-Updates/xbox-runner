@@ -66,6 +66,8 @@ jobs:
           echo "xvc_url=$xvc_url" >> "$GITHUB_OUTPUT"
           filename=$(basename "$xvc_url")
           echo "filename=$filename" >> "$GITHUB_OUTPUT"
+          appVersion=$(echo "$msixvc_req" | jq -r '.files[0].fileName' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
+          echo "appVersion=$appVersion" >> "$GITHUB_OUTPUT"
 
       - name: Check if tag already exists
         id: tagcheck
@@ -111,6 +113,35 @@ jobs:
             -H "Authorization: LOW ${{ secrets.ARCHIVE_ORG_ACCESS_KEY }}:${{ secrets.ARCHIVE_ORG_SECRET_KEY }}" \
             --data-urlencode "url=${{ steps.apicall.outputs.xvc_url }}" \
             https://web.archive.org/save
+
+      - name: Append to Google Sheets
+        id: 'update_worksheet'
+        uses: jroehl/gsheet.action@v2.1.1
+        if: steps.extract.outputs.lastUpdateDate != steps.get_latest.outputs.latest_last_update && steps.tagcheck.outputs.tag_exists == 'false'
+        with:
+          spreadsheetId: 1QB6SexYxoWUr2LUEaZJcmMf6eBOFAb3sozSWXSvHU5U
+          commands: |
+            [
+              {
+                "command": "appendData",
+                "args": {
+                  "worksheetTitle": "Roblox",
+                  "valueInputOption": "RAW",
+                  "data": [
+                    [
+                      "${{ steps.apicall.outputs.appVersion }}",
+                      "",
+                      "",
+                      "",
+                      "=HYPERLINK(\"${{ steps.apicall.outputs.xvc_url }}\",\"Download\")"
+                    ]
+                  ]
+                }
+              }
+            ]
+        env:
+          GSHEET_CLIENT_EMAIL: ${{ secrets.GSHEET_CLIENT_EMAIL }}
+          GSHEET_PRIVATE_KEY: ${{ secrets.GSHEET_PRIVATE_KEY }}
 
       - name: Set release output
         id: release_check
