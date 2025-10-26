@@ -127,6 +127,7 @@ jobs:
                 "args": {
                   "worksheetTitle": "Roblox",
                   "valueInputOption": "RAW",
+                  "minCol": 1,
                   "data": [
                     [
                       "${{ steps.apicall.outputs.appVersion }}",
