@@ -69,6 +69,7 @@ jobs:
           echo "filename=$filename" >> "$GITHUB_OUTPUT"
           appVersion=$(echo "$msixvc_req" | jq -r '.files[0].fileName' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
           echo "appVersion=$appVersion" >> "$GITHUB_OUTPUT"
+          echo "today=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
 
       - name: Check if tag already exists
         id: tagcheck
@@ -127,13 +128,12 @@ jobs:
                 "command": "appendData",
                 "args": {
                   "worksheetTitle": "Roblox",
-                  "valueInputOption": "RAW",
+                  "valueInputOption": "USER_ENTERED",
                   "minCol": 1,
                   "data": [
                     [
                       "${{ steps.apicall.outputs.appVersion }}",
-                      "",
-                      "",
+                      "${{ steps.apicall.outputs.today }}",
                       "",
                       "=HYPERLINK(\"${{ steps.apicall.outputs.xvc_url }}\",\"Download\")"
                     ]
